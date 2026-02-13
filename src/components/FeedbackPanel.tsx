@@ -1,15 +1,37 @@
-import type { AnalysisResult } from '../types';
+import { useState, useMemo } from 'react';
+import type { AnalysisResult, Attempt } from '../types';
+import { exportSessionAsText } from '../lib/export';
+import { ComparisonView } from './ComparisonView';
 import { ScoreRing } from './ui/ScoreRing';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
 
 interface FeedbackPanelProps {
   analysis: AnalysisResult;
   attemptNumber: number;
+  attempts?: Attempt[];
+  audioBlob?: Blob | null;
+  sessionForExport?: { prompt: { text: string; type: string }; attempts: Attempt[]; createdAt: string };
 }
 
-export function FeedbackPanel({ analysis, attemptNumber }: FeedbackPanelProps) {
+export function FeedbackPanel({ analysis, attemptNumber, attempts, audioBlob, sessionForExport }: FeedbackPanelProps) {
   const dims = Object.entries(analysis.dimensions) as [string, { score: number; note: string }][];
+  const [copied, setCopied] = useState(false);
+
+  const audioUrl = useMemo(() => {
+    if (!audioBlob) return null;
+    return URL.createObjectURL(audioBlob);
+  }, [audioBlob]);
+
+  const handleCopy = () => {
+    if (!sessionForExport) return;
+    const text = exportSessionAsText(sessionForExport as any);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -27,7 +49,7 @@ export function FeedbackPanel({ analysis, attemptNumber }: FeedbackPanelProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-6">
           {dims.map(([key, val]) => (
             <ScoreRing key={key} score={val.score} size={56} strokeWidth={4} label={key} />
           ))}
@@ -65,6 +87,25 @@ export function FeedbackPanel({ analysis, attemptNumber }: FeedbackPanelProps) {
           {analysis.polishedVersion}
         </p>
       </Card>
+
+      {audioUrl && (
+        <Card>
+          <h4 className="text-sm font-medium text-stone-500 uppercase tracking-wider mb-3">
+            Your Recording
+          </h4>
+          <audio controls src={audioUrl} className="w-full" />
+        </Card>
+      )}
+
+      {attempts && attempts.length >= 2 && (
+        <ComparisonView attempts={attempts} />
+      )}
+
+      {sessionForExport && (
+        <Button variant="ghost" size="sm" onClick={handleCopy} className="w-full">
+          {copied ? 'Copied!' : 'Copy Summary'}
+        </Button>
+      )}
     </div>
   );
 }

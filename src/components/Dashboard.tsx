@@ -1,11 +1,13 @@
 import { useStats } from '../hooks/useStats';
 import { useStreak } from '../hooks/useStreak';
+import { useCoaching } from '../hooks/useCoaching';
 import { Card } from './ui/Card';
 import { ScoreRing } from './ui/ScoreRing';
 
 export function Dashboard() {
   const stats = useStats();
   const streak = useStreak();
+  const coaching = useCoaching();
 
   if (stats.totalSessions === 0) {
     return (
@@ -41,6 +43,25 @@ export function Dashboard() {
           <p className="text-xs text-stone-500">Avg Improvement</p>
         </Card>
       </div>
+
+      {coaching.length > 0 && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <h3 className="text-sm font-medium text-blue-800 uppercase tracking-wider mb-3">
+            Coaching Corner
+          </h3>
+          <div className="space-y-3">
+            {coaching.map(insight => (
+              <div key={insight.dimension}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-medium text-blue-900 capitalize">{insight.dimension}</span>
+                  <span className="text-xs text-blue-600">avg: {insight.avgScore}</span>
+                </div>
+                <p className="text-sm text-blue-700">{insight.tip}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {dims.length > 0 && (
         <Card>

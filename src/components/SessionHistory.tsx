@@ -1,14 +1,27 @@
 import { useState } from 'react';
 import { getSessions } from '../lib/storage';
+import { exportSessionAsText } from '../lib/export';
 import { QUESTION_TYPE_LABELS } from '../data/prompts';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { ScoreRing } from './ui/ScoreRing';
 import { FeedbackPanel } from './FeedbackPanel';
+import { Button } from './ui/Button';
 
 export function SessionHistory() {
   const sessions = getSessions();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = (sessionId: string) => {
+    const session = sessions.find(s => s.id === sessionId);
+    if (!session) return;
+    const text = exportSessionAsText(session);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(sessionId);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  };
 
   if (sessions.length === 0) {
     return (
@@ -82,6 +95,14 @@ export function SessionHistory() {
                     <FeedbackPanel analysis={attempt.analysis} attemptNumber={i + 1} />
                   </div>
                 ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleCopy(session.id)}
+                  className="w-full"
+                >
+                  {copiedId === session.id ? 'Copied!' : 'Copy Summary'}
+                </Button>
               </div>
             )}
           </div>

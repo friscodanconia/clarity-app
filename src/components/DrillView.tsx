@@ -1,12 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useSession } from '../hooks/useSession';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { isSpeechSupported } from '../lib/speech';
+import { getProfile } from '../lib/storage';
 import { QUESTION_TYPE_LABELS } from '../data/prompts';
+import type { Prompt } from '../types';
 import { CategoryPicker } from './CategoryPicker';
 import { RecordButton } from './RecordButton';
 import { TranscriptDisplay } from './TranscriptDisplay';
 import { FeedbackPanel } from './FeedbackPanel';
+import { KeyboardHints } from './KeyboardHints';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
@@ -14,8 +18,70 @@ import { Spinner } from './ui/Spinner';
 
 export function DrillView() {
   const session = useSession();
-  const speech = useSpeechRecognition();
+  const profile = getProfile();
+  const maxDuration = profile?.timedMode ? profile.timerDuration : undefined;
+
+  const onAutoStop = useCallback(() => {
+    // auto-stop just stops the recording; user can then submit
+  }, []);
+
+  const speech = useSpeechRecognition({ maxDuration, onAutoStop });
   const [showCategory, setShowCategory] = useState(true);
+
+  const handleToggleRecord = useCallback(() => {
+    if (speech.isRecording) {
+      speech.stop();
+    } else {
+      speech.start();
+      session.setPhase('recording');
+    }
+  }, [speech, session]);
+
+  const handleSubmit = useCallback(() => {
+    if (speech.transcript.trim().length < 10) return;
+    session.submitRecording(speech.transcript, speech.elapsed);
+  }, [speech, session]);
+
+  const handleRetry = useCallback(() => {
+    speech.setTranscript('');
+    session.retry();
+  }, [speech, session]);
+
+  const handleNext = useCallback(() => {
+    speech.setTranscript('');
+    setShowCategory(true);
+    session.nextDrill();
+  }, [speech, session]);
+
+  const shortcuts = useMemo(() => {
+    const map: Record<string, () => void> = {};
+    if (session.phase === 'feedback') {
+      map['r'] = handleRetry;
+      map['n'] = handleNext;
+    } else if (session.phase === 'ready' || session.phase === 'recording') {
+      map[' '] = handleToggleRecord; // Space
+      if (!speech.isRecording && speech.transcript.trim().length >= 10) {
+        map['Enter'] = handleSubmit;
+      }
+    }
+    return map;
+  }, [session.phase, speech.isRecording, speech.transcript, handleToggleRecord, handleSubmit, handleRetry, handleNext]);
+
+  useKeyboardShortcuts(shortcuts);
+
+  const keyboardHints = useMemo(() => {
+    if (session.phase === 'feedback') {
+      return [{ key: 'R', label: 'Retry' }, { key: 'N', label: 'Next' }];
+    }
+    if (session.phase === 'ready' || session.phase === 'recording') {
+      const hints = [{ key: 'Space', label: speech.isRecording ? 'Stop' : 'Record' }];
+      if (!speech.isRecording && speech.transcript.trim().length >= 10) {
+        hints.push({ key: 'Enter', label: 'Submit' });
+      }
+      return hints;
+    }
+    return [];
+  }, [session.phase, speech.isRecording, speech.transcript]);
 
   if (!isSpeechSupported()) {
     return (
@@ -30,43 +96,29 @@ export function DrillView() {
   if (showCategory && !session.prompt) {
     return (
       <CategoryPicker
-        onSelect={(type) => {
-          session.startDrill(type);
+        onSelect={(typeOrPrompt) => {
+          if (typeOrPrompt && typeof typeOrPrompt === 'object') {
+            session.startDrill(typeOrPrompt as Prompt);
+          } else {
+            session.startDrill(typeOrPrompt as string | undefined);
+          }
           setShowCategory(false);
         }}
       />
     );
   }
 
-  const handleToggleRecord = () => {
-    if (speech.isRecording) {
-      speech.stop();
-    } else {
-      speech.start();
-      session.setPhase('recording');
-    }
-  };
-
-  const handleSubmit = () => {
-    if (speech.transcript.trim().length < 10) return;
-    session.submitRecording(speech.transcript, speech.elapsed);
-  };
-
-  const handleRetry = () => {
-    speech.setTranscript('');
-    session.retry();
-  };
-
-  const handleNext = () => {
-    speech.setTranscript('');
-    setShowCategory(true);
-    session.nextDrill();
-  };
-
   const currentAttempt = session.attempts.length + 1;
   const lastAnalysis = session.attempts.length > 0
     ? session.attempts[session.attempts.length - 1].analysis
     : null;
+
+  const sessionForExport = session.prompt && session.attempts.length > 0 ? {
+    id: '',
+    prompt: session.prompt,
+    attempts: session.attempts,
+    createdAt: session.attempts[0].recordedAt,
+  } : undefined;
 
   return (
     <div className="space-y-6">
@@ -94,28 +146,10 @@ export function DrillView() {
           <FeedbackPanel
             analysis={lastAnalysis}
             attemptNumber={session.attempts.length}
+            attempts={session.attempts}
+            audioBlob={speech.audioBlob}
+            sessionForExport={sessionForExport}
           />
-
-          {session.attempts.length >= 2 && (
-            <Card className="border-green-200 bg-green-50/50">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">
-                  {session.attempts[session.attempts.length - 1].analysis.overall >
-                   session.attempts[0].analysis.overall ? '📈' : '📊'}
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-green-800">
-                    Attempt 1: {session.attempts[0].analysis.overall} → Attempt {session.attempts.length}: {session.attempts[session.attempts.length - 1].analysis.overall}
-                  </p>
-                  <p className="text-xs text-green-600">
-                    {session.attempts[session.attempts.length - 1].analysis.overall > session.attempts[0].analysis.overall
-                      ? 'Nice improvement!'
-                      : 'Keep practicing — improvement comes with reps.'}
-                  </p>
-                </div>
-              </div>
-            </Card>
-          )}
 
           <div className="flex gap-3">
             <Button variant="secondary" onClick={handleRetry} className="flex-1">
@@ -125,6 +159,8 @@ export function DrillView() {
               Next Question
             </Button>
           </div>
+
+          <KeyboardHints hints={keyboardHints} />
         </div>
       ) : (
         <div className="space-y-6">
@@ -132,6 +168,7 @@ export function DrillView() {
             transcript={speech.transcript}
             isRecording={speech.isRecording}
             elapsed={speech.elapsed}
+            maxDuration={maxDuration}
           />
 
           <div className="flex flex-col items-center gap-4">
@@ -158,6 +195,8 @@ export function DrillView() {
           {session.error && (
             <p className="text-sm text-red-600 text-center">{session.error}</p>
           )}
+
+          <KeyboardHints hints={keyboardHints} />
         </div>
       )}
     </div>

@@ -11,12 +11,18 @@ export function useSession() {
   const [sessionId, setSessionId] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const startDrill = useCallback((preferredType?: string) => {
+  const startDrill = useCallback((preferredTypeOrPrompt?: string | Prompt) => {
     const profile = getProfile();
     if (!profile) return;
-    const used = getUsedPromptIds();
-    const p = pickPrompt(profile.domains, used, preferredType);
-    setPrompt(p);
+
+    if (preferredTypeOrPrompt && typeof preferredTypeOrPrompt === 'object') {
+      setPrompt(preferredTypeOrPrompt);
+    } else {
+      const used = getUsedPromptIds();
+      const p = pickPrompt(profile.domains, used, preferredTypeOrPrompt as string | undefined);
+      setPrompt(p);
+    }
+
     setAttempts([]);
     setSessionId(crypto.randomUUID());
     setPhase('ready');
@@ -25,14 +31,12 @@ export function useSession() {
 
   const submitRecording = useCallback(async (transcript: string, duration: number) => {
     if (!prompt) return;
-    const profile = getProfile();
-    if (!profile) return;
 
     setPhase('analyzing');
     setError(null);
 
     try {
-      const analysis = await analyzeResponse(profile.apiKey, prompt.text, prompt.type, transcript);
+      const analysis = await analyzeResponse(prompt.text, prompt.type, transcript);
       const attempt: Attempt = {
         transcript,
         duration,

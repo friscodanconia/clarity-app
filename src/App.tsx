@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { getProfile } from './lib/storage';
+import { getProfile, migrateProfile } from './lib/storage';
 import { Layout } from './components/Layout';
 import { Onboarding } from './components/Onboarding';
 import { DrillView } from './components/DrillView';
@@ -9,9 +9,10 @@ import { SessionHistory } from './components/SessionHistory';
 import { Settings } from './components/Settings';
 
 export default function App() {
-  const [hasProfile, setHasProfile] = useState(!!getProfile());
+  const [hasProfile, setHasProfile] = useState(false);
 
   useEffect(() => {
+    migrateProfile();
     setHasProfile(!!getProfile());
   }, []);
 

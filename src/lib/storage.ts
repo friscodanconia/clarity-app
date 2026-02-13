@@ -6,6 +6,18 @@ const KEYS = {
   usedPrompts: 'clarity_used_prompts',
 } as const;
 
+export function migrateProfile(): void {
+  const raw = localStorage.getItem(KEYS.profile);
+  if (!raw) return;
+  try {
+    const profile = JSON.parse(raw);
+    if ('apiKey' in profile) {
+      delete profile.apiKey;
+      localStorage.setItem(KEYS.profile, JSON.stringify(profile));
+    }
+  } catch { /* ignore corrupt data */ }
+}
+
 export function getProfile(): UserProfile | null {
   const raw = localStorage.getItem(KEYS.profile);
   return raw ? JSON.parse(raw) : null;

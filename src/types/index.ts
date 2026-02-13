@@ -4,17 +4,22 @@ export type Domain =
   | 'marketing' | 'ai' | 'product' | 'strategy' | 'finance'
   | 'engineering' | 'design' | 'sales' | 'operations' | 'leadership';
 
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
 export interface Prompt {
   id: string;
   text: string;
   type: QuestionType;
   domains: Domain[];
+  difficulty?: Difficulty;
 }
 
 export interface UserProfile {
-  apiKey: string;
   domains: Domain[];
   createdAt: string;
+  timedMode?: boolean;
+  timerDuration?: 60 | 90 | 120;
+  preferredDifficulty?: Difficulty;
 }
 
 export interface DimensionScore {
